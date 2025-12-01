@@ -278,10 +278,9 @@
 
     <div id="controls">
         <h3>🧩 Interactive Puzzle</h3>
-        <p><strong>🖱️ Drag</strong> to move pieces | <strong>🖱️ Right-click</strong> or <strong>⌨️ R</strong> to rotate 1°</p>
-        <p><strong>⌨️ Double-click</strong> to bring to front</p>
+        <p><strong>🖱️ Drag</strong> or <strong>👆 Touch</strong> to move pieces | <strong>🖱️ Right-click</strong> or <strong>⌨️ R</strong> to rotate 1°</p>
+        <p><strong>⌨️ Double-click</strong> or <strong>👆 Double-tap</strong> to bring to front</p>
         <button onclick="resetPuzzle()">🔄 Reset Positions</button>
-        <button onclick="shufflePuzzle()">🎲 Shuffle</button>
     </div>
 
     <script>
@@ -333,6 +332,7 @@
 
                 // Event listeners
                 piece.addEventListener('mousedown', startDrag);
+                piece.addEventListener('touchstart', startTouch);
                 piece.addEventListener('contextmenu', rotatePiece);
                 piece.addEventListener('dblclick', bringToFront);
 
@@ -425,23 +425,53 @@
             initPuzzle();
         }
 
-        // Shuffle puzzle
-        function shufflePuzzle() {
-            const pieces = document.querySelectorAll('.puzzle-piece');
-            const containerWidth = container.offsetWidth;
-            const containerHeight = container.offsetHeight;
+        // Touch functionality for mobile devices
+        function startTouch(e) {
+            const piece = e.currentTarget;
+            const touch = e.touches[0];
 
-            pieces.forEach(piece => {
-                const maxX = containerWidth - piece.offsetWidth;
-                const maxY = containerHeight - piece.offsetHeight;
+            isDragging = true;
+            selectedPiece = piece;
 
-                piece.style.left = `${Math.random() * maxX}px`;
-                piece.style.top = `${Math.random() * maxY}px`;
+            piece.classList.add('dragging');
+            piece.style.zIndex = currentZIndex++;
 
-                const rotation = Math.floor(Math.random() * 360);
-                piece.dataset.rotation = rotation;
-                updateTransform(piece);
-            });
+            const rect = piece.getBoundingClientRect();
+            dragOffset.x = touch.clientX - rect.left;
+            dragOffset.y = touch.clientY - rect.top;
+
+            document.addEventListener('touchmove', touchMove);
+            document.addEventListener('touchend', stopTouch);
+
+            e.preventDefault();
+        }
+
+        function touchMove(e) {
+            if (!isDragging || !selectedPiece) return;
+
+            const touch = e.touches[0];
+            const containerRect = container.getBoundingClientRect();
+            let x = touch.clientX - containerRect.left - dragOffset.x;
+            let y = touch.clientY - containerRect.top - dragOffset.y;
+
+            // Keep within bounds
+            x = Math.max(0, Math.min(x, containerRect.width - selectedPiece.offsetWidth));
+            y = Math.max(0, Math.min(y, containerRect.height - selectedPiece.offsetHeight));
+
+            selectedPiece.style.left = `${x}px`;
+            selectedPiece.style.top = `${y}px`;
+
+            e.preventDefault();
+        }
+
+        function stopTouch() {
+            if (selectedPiece) {
+                selectedPiece.classList.remove('dragging');
+            }
+            isDragging = false;
+            selectedPiece = null;
+            document.removeEventListener('touchmove', touchMove);
+            document.removeEventListener('touchend', stopTouch);
         }
 
         // Initialize on load
