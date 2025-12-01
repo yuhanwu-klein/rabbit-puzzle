@@ -289,6 +289,56 @@
                 inset 0 1px 0 rgba(255, 255, 255, 0.2);
         }
 
+        /* AR Mode */
+        #ar-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 20000;
+        }
+
+        #ar-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #exit-ar {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: all 0.3s;
+            box-shadow:
+                0 4px 8px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            border: 2px solid #991b1b;
+            z-index: 20001;
+        }
+
+        #exit-ar:hover {
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            transform: translateY(-2px);
+            box-shadow:
+                0 6px 12px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .final-image-container img {
+            cursor: pointer;
+        }
+
     </style>
 </head>
 <body>
@@ -298,10 +348,16 @@
 
     <div id="final-image-overlay">
         <div class="final-image-container">
-            <img src="WechatIMG626.jpg" alt="Completed Puzzle">
+            <img src="WechatIMG626.jpg" alt="Completed Puzzle" onclick="enterARMode()">
         </div>
     </div>
 
+    <div id="ar-container" style="display: none;">
+        <canvas id="ar-canvas"></canvas>
+        <button id="exit-ar" onclick="exitARMode()">Exit AR</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         const puzzlePieces = [
             'image 10.png',
@@ -446,6 +502,262 @@
                 overlay.classList.add('show');
             }, 500);
         }
+
+        // AR Mode - 3D Glass Rabbit with Physics
+        let arScene, arCamera, arRenderer, arRabbit, arAnimationId;
+        let rabbitVelocity = { x: 0, y: 0, z: 0 };
+        let gravity = -0.01;
+        let isShaking = false;
+        let lastAcceleration = { x: 0, y: 0, z: 0 };
+
+        function enterARMode() {
+            const arContainer = document.getElementById('ar-container');
+            const canvas = document.getElementById('ar-canvas');
+            arContainer.style.display = 'block';
+
+            // Setup Three.js scene
+            arScene = new THREE.Scene();
+            arScene.background = new THREE.Color(0x1a1a2e);
+
+            // Camera
+            arCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            arCamera.position.z = 5;
+
+            // Renderer
+            arRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            arRenderer.setSize(window.innerWidth, window.innerHeight);
+            arRenderer.shadowMap.enabled = true;
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            arScene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 5);
+            directionalLight.castShadow = true;
+            arScene.add(directionalLight);
+
+            const pointLight1 = new THREE.PointLight(0xff0000, 1, 100);
+            pointLight1.position.set(-5, 5, 5);
+            arScene.add(pointLight1);
+
+            const pointLight2 = new THREE.PointLight(0xff00ff, 0.5, 100);
+            pointLight2.position.set(5, -5, 5);
+            arScene.add(pointLight2);
+
+            // Create Glass Rabbit
+            arRabbit = createGlassRabbit();
+            arScene.add(arRabbit);
+
+            // Request device motion permission for iOS
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('devicemotion', handleDeviceMotion);
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                window.addEventListener('devicemotion', handleDeviceMotion);
+            }
+
+            // Start animation loop
+            animateAR();
+        }
+
+        function createGlassRabbit() {
+            const rabbit = new THREE.Group();
+
+            // Glass material - red tinted transparent glass
+            const glassMaterial = new THREE.MeshPhysicalMaterial({
+                color: 0xff2020,
+                metalness: 0.1,
+                roughness: 0.1,
+                transmission: 0.9,
+                thickness: 0.5,
+                clearcoat: 1.0,
+                clearcoatRoughness: 0.1,
+                transparent: true,
+                opacity: 0.8,
+                reflectivity: 1.0,
+                refractionRatio: 0.98,
+                ior: 1.5
+            });
+
+            // Body (ellipsoid)
+            const bodyGeometry = new THREE.SphereGeometry(1, 32, 32);
+            bodyGeometry.scale(1, 1.2, 1.5);
+            const body = new THREE.Mesh(bodyGeometry, glassMaterial);
+            body.castShadow = true;
+            rabbit.add(body);
+
+            // Head
+            const headGeometry = new THREE.SphereGeometry(0.7, 32, 32);
+            const head = new THREE.Mesh(headGeometry, glassMaterial);
+            head.position.set(0, 1.5, 0.5);
+            head.castShadow = true;
+            rabbit.add(head);
+
+            // Ears (long)
+            const earGeometry = new THREE.CylinderGeometry(0.15, 0.1, 1.5, 16);
+            const leftEar = new THREE.Mesh(earGeometry, glassMaterial);
+            leftEar.position.set(-0.4, 2.5, 0.5);
+            leftEar.rotation.z = 0.3;
+            leftEar.castShadow = true;
+            rabbit.add(leftEar);
+
+            const rightEar = new THREE.Mesh(earGeometry, glassMaterial);
+            rightEar.position.set(0.4, 2.5, 0.5);
+            rightEar.rotation.z = -0.3;
+            rightEar.castShadow = true;
+            rabbit.add(rightEar);
+
+            // Eyes
+            const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+            const eyeGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(-0.3, 1.6, 1.1);
+            rabbit.add(leftEye);
+
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(0.3, 1.6, 1.1);
+            rabbit.add(rightEye);
+
+            // Nose
+            const noseGeometry = new THREE.SphereGeometry(0.08, 16, 16);
+            const noseMaterial = new THREE.MeshStandardMaterial({ color: 0xff6699 });
+            const nose = new THREE.Mesh(noseGeometry, noseMaterial);
+            nose.position.set(0, 1.4, 1.2);
+            rabbit.add(nose);
+
+            // Tail
+            const tailGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+            const tail = new THREE.Mesh(tailGeometry, glassMaterial);
+            tail.position.set(0, 0.2, -1.3);
+            tail.castShadow = true;
+            rabbit.add(tail);
+
+            // Legs
+            const legGeometry = new THREE.CylinderGeometry(0.2, 0.15, 0.8, 16);
+            const legPositions = [
+                { x: -0.5, y: -1, z: 0.5 },
+                { x: 0.5, y: -1, z: 0.5 },
+                { x: -0.5, y: -1, z: -0.5 },
+                { x: 0.5, y: -1, z: -0.5 }
+            ];
+
+            legPositions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeometry, glassMaterial);
+                leg.position.set(pos.x, pos.y, pos.z);
+                leg.castShadow = true;
+                rabbit.add(leg);
+            });
+
+            rabbit.position.y = 2;
+            return rabbit;
+        }
+
+        function handleDeviceMotion(event) {
+            const acceleration = event.accelerationIncludingGravity;
+            if (!acceleration) return;
+
+            // Detect shaking
+            const deltaX = Math.abs(acceleration.x - lastAcceleration.x);
+            const deltaY = Math.abs(acceleration.y - lastAcceleration.y);
+            const deltaZ = Math.abs(acceleration.z - lastAcceleration.z);
+
+            if (deltaX + deltaY + deltaZ > 30) {
+                isShaking = true;
+                // Apply force when shaking
+                rabbitVelocity.x += (Math.random() - 0.5) * 0.3;
+                rabbitVelocity.y += (Math.random() - 0.5) * 0.2;
+                rabbitVelocity.z += (Math.random() - 0.5) * 0.3;
+            } else {
+                isShaking = false;
+            }
+
+            lastAcceleration = {
+                x: acceleration.x,
+                y: acceleration.y,
+                z: acceleration.z
+            };
+        }
+
+        function animateAR() {
+            arAnimationId = requestAnimationFrame(animateAR);
+
+            if (arRabbit) {
+                // Apply gravity
+                rabbitVelocity.y += gravity;
+
+                // Apply velocity
+                arRabbit.position.x += rabbitVelocity.x;
+                arRabbit.position.y += rabbitVelocity.y;
+                arRabbit.position.z += rabbitVelocity.z;
+
+                // Rotation when falling
+                arRabbit.rotation.x += rabbitVelocity.y * 0.1;
+                arRabbit.rotation.z += rabbitVelocity.x * 0.1;
+
+                // Floor collision
+                if (arRabbit.position.y < -2) {
+                    arRabbit.position.y = -2;
+                    rabbitVelocity.y *= -0.6; // Bounce with damping
+                    rabbitVelocity.x *= 0.9;
+                    rabbitVelocity.z *= 0.9;
+                }
+
+                // Wall collisions
+                const wallLimit = 4;
+                if (Math.abs(arRabbit.position.x) > wallLimit) {
+                    arRabbit.position.x = Math.sign(arRabbit.position.x) * wallLimit;
+                    rabbitVelocity.x *= -0.7;
+                }
+                if (Math.abs(arRabbit.position.z) > wallLimit) {
+                    arRabbit.position.z = Math.sign(arRabbit.position.z) * wallLimit;
+                    rabbitVelocity.z *= -0.7;
+                }
+
+                // Air resistance
+                rabbitVelocity.x *= 0.99;
+                rabbitVelocity.y *= 0.99;
+                rabbitVelocity.z *= 0.99;
+            }
+
+            arRenderer.render(arScene, arCamera);
+        }
+
+        function exitARMode() {
+            const arContainer = document.getElementById('ar-container');
+            arContainer.style.display = 'none';
+
+            // Cleanup
+            if (arAnimationId) {
+                cancelAnimationFrame(arAnimationId);
+            }
+            window.removeEventListener('devicemotion', handleDeviceMotion);
+
+            if (arRenderer) {
+                arRenderer.dispose();
+            }
+            if (arScene) {
+                arScene.clear();
+            }
+
+            // Reset physics
+            rabbitVelocity = { x: 0, y: 0, z: 0 };
+        }
+
+        // Handle window resize for AR
+        window.addEventListener('resize', () => {
+            if (arCamera && arRenderer) {
+                arCamera.aspect = window.innerWidth / window.innerHeight;
+                arCamera.updateProjectionMatrix();
+                arRenderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
 
         // Touch functionality for mobile devices
         function startTouch(e) {
