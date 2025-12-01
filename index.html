@@ -184,10 +184,65 @@
                 0 0 30px rgba(59, 130, 246, 0.5);
         }
 
+        /* Final image overlay */
+        #final-image-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+
+        #final-image-overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .final-image-container {
+            perspective: 1000px;
+            max-width: 90%;
+            max-height: 90%;
+        }
+
+        .final-image-container img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            animation: flip-in 1.5s ease-out;
+        }
+
+        @keyframes flip-in {
+            0% {
+                transform: rotateY(90deg);
+                opacity: 0;
+            }
+            50% {
+                opacity: 1;
+            }
+            100% {
+                transform: rotateY(0deg);
+                opacity: 1;
+            }
+        }
+
     </style>
 </head>
 <body>
     <div id="puzzle-container"></div>
+
+    <div id="final-image-overlay">
+        <div class="final-image-container">
+            <img src="WechatIMG626.jpg" alt="Completed Puzzle">
+        </div>
+    </div>
 
     <script>
         const puzzlePieces = [
@@ -202,10 +257,14 @@
         const container = document.getElementById('puzzle-container');
         let currentZIndex = 1;
         let selectedPiece = null;
+        let initialPositions = [];
+        let puzzleCompleted = false;
 
         // Initialize puzzle pieces
         function initPuzzle() {
             container.innerHTML = '';
+            initialPositions = [];
+            puzzleCompleted = false;
             const containerWidth = container.offsetWidth;
             const containerHeight = container.offsetHeight;
 
@@ -213,6 +272,7 @@
                 const piece = document.createElement('div');
                 piece.className = 'puzzle-piece';
                 piece.dataset.rotation = 0;
+                piece.dataset.index = index;
 
                 // Create wood block
                 const woodBlock = document.createElement('div');
@@ -230,11 +290,21 @@
                 const col = index % cols;
                 const row = Math.floor(index / cols);
 
-                piece.style.left = `${50 + col * 120}px`;
-                piece.style.top = `${50 + row * 120}px`;
+                const initialX = 50 + col * 120;
+                const initialY = 50 + row * 120;
+
+                piece.style.left = `${initialX}px`;
+                piece.style.top = `${initialY}px`;
                 piece.style.width = '100px';
                 piece.style.height = '100px';
                 piece.style.zIndex = index + 1;
+
+                // Store initial position
+                initialPositions.push({
+                    x: initialX,
+                    y: initialY,
+                    rotation: 0
+                });
 
                 // Event listeners
                 piece.addEventListener('mousedown', startDrag);
@@ -295,6 +365,9 @@
             selectedPiece = null;
             document.removeEventListener('mousemove', drag);
             document.removeEventListener('mouseup', stopDrag);
+
+            // Check if puzzle is complete
+            checkPuzzleCompletion();
         }
 
         // Rotation functionality (1 degree increment)
@@ -329,6 +402,66 @@
         // Reset puzzle
         function resetPuzzle() {
             initPuzzle();
+            // Hide final image overlay if shown
+            const overlay = document.getElementById('final-image-overlay');
+            overlay.classList.remove('show');
+        }
+
+        // Check if puzzle is complete
+        function checkPuzzleCompletion() {
+            if (puzzleCompleted) return;
+
+            const pieces = document.querySelectorAll('.puzzle-piece');
+            let totalSimilarity = 0;
+            const positionTolerance = 30; // pixels tolerance for position
+            const rotationTolerance = 15; // degrees tolerance for rotation
+
+            pieces.forEach((piece, index) => {
+                const pieceIndex = parseInt(piece.dataset.index);
+                const currentX = parseInt(piece.style.left);
+                const currentY = parseInt(piece.style.top);
+                const currentRotation = parseInt(piece.dataset.rotation) || 0;
+
+                const initialPos = initialPositions[pieceIndex];
+
+                // Calculate position similarity
+                const xDiff = Math.abs(currentX - initialPos.x);
+                const yDiff = Math.abs(currentY - initialPos.y);
+                const posDistance = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
+
+                // Calculate rotation similarity (normalized to 0-360)
+                const normalizedRotation = ((currentRotation % 360) + 360) % 360;
+                const rotDiff = Math.min(
+                    Math.abs(normalizedRotation - initialPos.rotation),
+                    360 - Math.abs(normalizedRotation - initialPos.rotation)
+                );
+
+                // Position score (1 if within tolerance, decreases with distance)
+                const posScore = posDistance <= positionTolerance ? 1 : Math.max(0, 1 - (posDistance - positionTolerance) / 100);
+
+                // Rotation score (1 if within tolerance, decreases with angle difference)
+                const rotScore = rotDiff <= rotationTolerance ? 1 : Math.max(0, 1 - (rotDiff - rotationTolerance) / 90);
+
+                // Combined similarity (70% position, 30% rotation)
+                const pieceSimilarity = (posScore * 0.7) + (rotScore * 0.3);
+                totalSimilarity += pieceSimilarity;
+            });
+
+            const similarityPercentage = (totalSimilarity / pieces.length) * 100;
+
+            // Show final image if similarity is 80% or higher
+            if (similarityPercentage >= 80) {
+                puzzleCompleted = true;
+                showFinalImage();
+            }
+        }
+
+        // Show final image with flipping animation
+        function showFinalImage() {
+            const overlay = document.getElementById('final-image-overlay');
+            setTimeout(() => {
+                overlay.classList.add('show');
+            }, 500);
         }
 
         // Touch functionality for mobile devices
@@ -378,6 +511,9 @@
             selectedPiece = null;
             document.removeEventListener('touchmove', touchMove);
             document.removeEventListener('touchend', stopTouch);
+
+            // Check if puzzle is complete
+            checkPuzzleCompletion();
         }
 
         // Initialize on load
