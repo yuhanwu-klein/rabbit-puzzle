@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Puzzle on Blue Metal Pallet</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a2a6c 0%, #2b5876 50%, #4e4376 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #puzzle-container {
+            position: relative;
+            width: calc(100% - 40px);
+            height: calc(100vh - 180px);
+            margin: 20px;
+            background:
+                repeating-linear-gradient(
+                    0deg,
+                    #1e3a8a 0px,
+                    #1e3a8a 60px,
+                    #172a5f 60px,
+                    #172a5f 62px
+                ),
+                linear-gradient(
+                    135deg,
+                    #2563eb 0%,
+                    #1e40af 50%,
+                    #1e3a8a 100%
+                );
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow:
+                inset 0 2px 10px rgba(0, 0, 0, 0.5),
+                inset 0 -2px 10px rgba(255, 255, 255, 0.1),
+                0 10px 40px rgba(0, 0, 0, 0.5),
+                0 0 0 2px #374151,
+                0 0 0 4px #1f2937;
+            border: 3px solid #475569;
+        }
+
+        /* Metal texture overlay */
+        #puzzle-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Rivets on the pallet */
+        #puzzle-container::after {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 12px;
+            height: 12px;
+            background: radial-gradient(circle, #6b7280 0%, #374151 70%, #1f2937 100%);
+            border-radius: 50%;
+            box-shadow:
+                calc(100vw - 80px) 0 0 #374151,
+                0 calc(100vh - 240px) 0 #374151,
+                calc(100vw - 80px) calc(100vh - 240px) 0 #374151,
+                inset 0 1px 2px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .puzzle-piece {
+            position: absolute;
+            cursor: move;
+            user-select: none;
+            transition: box-shadow 0.2s, filter 0.2s;
+            z-index: 1;
+        }
+
+        /* Wood block backing */
+        .wood-block {
+            width: 100%;
+            height: 100%;
+            background:
+                repeating-linear-gradient(
+                    90deg,
+                    #8b4513 0px,
+                    #a0522d 2px,
+                    #8b4513 4px,
+                    #6b3410 6px
+                ),
+                linear-gradient(
+                    180deg,
+                    #d2691e 0%,
+                    #a0522d 30%,
+                    #8b4513 70%,
+                    #654321 100%
+                );
+            border-radius: 8px;
+            box-shadow:
+                inset 0 2px 4px rgba(0, 0, 0, 0.3),
+                inset 0 -2px 4px rgba(255, 255, 255, 0.1),
+                0 8px 16px rgba(0, 0, 0, 0.4),
+                0 4px 8px rgba(0, 0, 0, 0.3);
+            border: 2px solid #654321;
+            position: relative;
+        }
+
+        /* Wood grain texture */
+        .wood-block::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                repeating-linear-gradient(
+                    90deg,
+                    transparent 0px,
+                    rgba(0, 0, 0, 0.1) 1px,
+                    transparent 2px,
+                    transparent 10px
+                );
+            border-radius: 6px;
+            pointer-events: none;
+        }
+
+        .puzzle-piece img {
+            width: calc(100% - 20px);
+            height: calc(100% - 20px);
+            pointer-events: none;
+            border-radius: 5px;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            box-shadow:
+                0 4px 8px rgba(0, 0, 0, 0.3),
+                0 2px 4px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .puzzle-piece:hover {
+            filter: brightness(1.1);
+            z-index: 999 !important;
+        }
+
+        .puzzle-piece:hover .wood-block {
+            box-shadow:
+                inset 0 2px 4px rgba(0, 0, 0, 0.3),
+                inset 0 -2px 4px rgba(255, 255, 255, 0.1),
+                0 12px 24px rgba(0, 0, 0, 0.5),
+                0 6px 12px rgba(0, 0, 0, 0.4),
+                0 0 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .puzzle-piece.dragging {
+            opacity: 0.9;
+            z-index: 1001 !important;
+            filter: brightness(1.15);
+        }
+
+        .puzzle-piece.dragging .wood-block {
+            box-shadow:
+                inset 0 2px 4px rgba(0, 0, 0, 0.3),
+                inset 0 -2px 4px rgba(255, 255, 255, 0.1),
+                0 20px 40px rgba(0, 0, 0, 0.6),
+                0 10px 20px rgba(0, 0, 0, 0.5),
+                0 0 30px rgba(59, 130, 246, 0.5);
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            padding: 20px 40px;
+            border-radius: 15px;
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1),
+                0 0 0 1px rgba(59, 130, 246, 0.3);
+            text-align: center;
+            border: 2px solid #374151;
+        }
+
+        #controls h3 {
+            margin: 0 0 12px 0;
+            color: #60a5fa;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            font-size: 24px;
+            letter-spacing: 1px;
+        }
+
+        #controls p {
+            margin: 6px 0;
+            color: #93c5fd;
+            font-size: 14px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        button {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            margin: 8px 5px 0 5px;
+            transition: all 0.3s;
+            box-shadow:
+                0 4px 8px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            border: 1px solid #1e3a8a;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+            transform: translateY(-2px);
+            box-shadow:
+                0 6px 12px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+            box-shadow:
+                0 2px 4px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .rotation-info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            padding: 15px 25px;
+            border-radius: 10px;
+            color: #60a5fa;
+            font-size: 14px;
+            box-shadow:
+                0 5px 15px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            border: 2px solid #374151;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .rotation-info strong {
+            color: #93c5fd;
+        }
+    </style>
+</head>
+<body>
+    <div id="puzzle-container"></div>
+
+    <div class="rotation-info">
+        <strong>Rotation:</strong> 1° per click
+    </div>
+
+    <div id="controls">
+        <h3>🧩 Interactive Puzzle</h3>
+        <p><strong>🖱️ Drag</strong> to move pieces | <strong>🖱️ Right-click</strong> or <strong>⌨️ R</strong> to rotate 1°</p>
+        <p><strong>⌨️ Double-click</strong> to bring to front</p>
+        <button onclick="resetPuzzle()">🔄 Reset Positions</button>
+        <button onclick="shufflePuzzle()">🎲 Shuffle</button>
+    </div>
+
+    <script>
+        const puzzlePieces = [
+            'IMG_3278.png',
+            'IMG_3278 1.png',
+            'IMG_3278 2.png',
+            'IMG_3278 3.png',
+            'IMG_3278 4.png'
+        ];
+
+        const container = document.getElementById('puzzle-container');
+        let currentZIndex = 1;
+        let selectedPiece = null;
+
+        // Initialize puzzle pieces
+        function initPuzzle() {
+            container.innerHTML = '';
+            const containerWidth = container.offsetWidth;
+            const containerHeight = container.offsetHeight;
+
+            puzzlePieces.forEach((image, index) => {
+                const piece = document.createElement('div');
+                piece.className = 'puzzle-piece';
+                piece.dataset.rotation = 0;
+
+                // Create wood block
+                const woodBlock = document.createElement('div');
+                woodBlock.className = 'wood-block';
+
+                // Create image
+                const img = document.createElement('img');
+                img.src = image;
+
+                woodBlock.appendChild(img);
+                piece.appendChild(woodBlock);
+
+                // Initial positions (spread them out)
+                const cols = Math.ceil(Math.sqrt(puzzlePieces.length));
+                const col = index % cols;
+                const row = Math.floor(index / cols);
+
+                piece.style.left = `${50 + col * 400}px`;
+                piece.style.top = `${50 + row * 400}px`;
+                piece.style.width = '350px';
+                piece.style.height = '350px';
+                piece.style.zIndex = index + 1;
+
+                // Event listeners
+                piece.addEventListener('mousedown', startDrag);
+                piece.addEventListener('contextmenu', rotatePiece);
+                piece.addEventListener('dblclick', bringToFront);
+
+                container.appendChild(piece);
+            });
+
+            currentZIndex = puzzlePieces.length + 1;
+        }
+
+        // Drag functionality
+        let dragOffset = { x: 0, y: 0 };
+        let isDragging = false;
+
+        function startDrag(e) {
+            if (e.button !== 0) return; // Only left mouse button
+
+            const piece = e.currentTarget;
+            isDragging = true;
+            selectedPiece = piece;
+
+            piece.classList.add('dragging');
+            piece.style.zIndex = currentZIndex++;
+
+            const rect = piece.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+
+            e.preventDefault();
+        }
+
+        function drag(e) {
+            if (!isDragging || !selectedPiece) return;
+
+            const containerRect = container.getBoundingClientRect();
+            let x = e.clientX - containerRect.left - dragOffset.x;
+            let y = e.clientY - containerRect.top - dragOffset.y;
+
+            // Keep within bounds
+            x = Math.max(0, Math.min(x, containerRect.width - selectedPiece.offsetWidth));
+            y = Math.max(0, Math.min(y, containerRect.height - selectedPiece.offsetHeight));
+
+            selectedPiece.style.left = `${x}px`;
+            selectedPiece.style.top = `${y}px`;
+        }
+
+        function stopDrag() {
+            if (selectedPiece) {
+                selectedPiece.classList.remove('dragging');
+            }
+            isDragging = false;
+            selectedPiece = null;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+
+        // Rotation functionality (1 degree increment)
+        function rotatePiece(e) {
+            e.preventDefault();
+            const piece = e.currentTarget;
+            let rotation = parseInt(piece.dataset.rotation) || 0;
+            rotation = (rotation + 1) % 360;
+            piece.dataset.rotation = rotation;
+            updateTransform(piece);
+        }
+
+        // Bring to front
+        function bringToFront(e) {
+            const piece = e.currentTarget;
+            piece.style.zIndex = currentZIndex++;
+        }
+
+        // Update transform
+        function updateTransform(piece) {
+            const rotation = piece.dataset.rotation || 0;
+            piece.style.transform = `rotate(${rotation}deg)`;
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'r' && selectedPiece) {
+                rotatePiece({ currentTarget: selectedPiece, preventDefault: () => {} });
+            }
+        });
+
+        // Reset puzzle
+        function resetPuzzle() {
+            initPuzzle();
+        }
+
+        // Shuffle puzzle
+        function shufflePuzzle() {
+            const pieces = document.querySelectorAll('.puzzle-piece');
+            const containerWidth = container.offsetWidth;
+            const containerHeight = container.offsetHeight;
+
+            pieces.forEach(piece => {
+                const maxX = containerWidth - piece.offsetWidth;
+                const maxY = containerHeight - piece.offsetHeight;
+
+                piece.style.left = `${Math.random() * maxX}px`;
+                piece.style.top = `${Math.random() * maxY}px`;
+
+                const rotation = Math.floor(Math.random() * 360);
+                piece.dataset.rotation = rotation;
+                updateTransform(piece);
+            });
+        }
+
+        // Initialize on load
+        window.addEventListener('load', initPuzzle);
+        window.addEventListener('resize', () => {
+            // Adjust pieces if they're out of bounds after resize
+            const pieces = document.querySelectorAll('.puzzle-piece');
+            const containerWidth = container.offsetWidth;
+            const containerHeight = container.offsetHeight;
+
+            pieces.forEach(piece => {
+                const left = Math.min(parseInt(piece.style.left), containerWidth - piece.offsetWidth);
+                const top = Math.min(parseInt(piece.style.top), containerHeight - piece.offsetHeight);
+                piece.style.left = `${Math.max(0, left)}px`;
+                piece.style.top = `${Math.max(0, top)}px`;
+            });
+        });
+    </script>
+</body>
+</html>
